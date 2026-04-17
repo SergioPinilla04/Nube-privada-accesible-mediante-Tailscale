@@ -1,11 +1,25 @@
 # Del filtrado DNS a una nube privada accesible mediante Tailscale
-## Introducción
+
+## Indice
+- [Introduccion](#introduccion)
+- [Fundamento teorico](#fundamento-teorico)
+  - [1. Tailscale - la muerte del modelo Hub-and-Spoke y el ascenso de la comunicacion peer-to-peer con WireGuard](#1-tailscale---la-muerte-del-modelo-hub-and-spoke-y-el-ascenso-de-la-comunicacion-peer-to-peer-con-wireguard)
+  - [2. Tailscale y su magia para realizar conexiones a traves de NATs y firewalls hogarenos](#2-tailscale-y-su-magia-para-realizar-conexiones-a-traves-de-nats-y-firewalls-hogarenos)
+- [Fase de implementacion](#fase-de-implementacion)
+  - [1. Blindaje del DNS (Pi-hole y Unbound DoT)](#1-blindaje-del-dns-pi-hole-y-unbound-dot)
+  - [2. Implementacion de Nextcloud AIO - conflicto de puertos y externalizacion del perimetro mediante proxy inverso](#2-implementacion-de-nextcloud-aio---conflicto-de-puertos-y-externalizacion-del-perimetro-mediante-proxy-inverso)
+  - [3. Implementacion de Immich - acceso seguro, proxy inverso, cifrado TLS y eleccion de proveedor DNS](#3-implementacion-de-immich---acceso-seguro-proxy-inverso-cifrado-tls-y-eleccion-de-proveedor-dns)
+- [4. Gestion del hardware - Raspberry Pi al limite](#4-gestion-del-hardware---raspberry-pi-al-limite)
+  - [4.1. La ingesta de datos - como importar cientos de gigas a Immich](#41-la-ingesta-de-datos---como-importar-cientos-de-gigas-a-immich)
+  - [4.2. Limitar los contenedores para no colapsar el hardware](#42-limitar-los-contenedores-para-no-colapsar-el-hardware)
+
+## Introduccion
 Antes de la evolución de este proyecto, la Raspberry Pi 5 equipada con 8 GB de memoria RAM desempeñaba una única dentro del entorno doméstico: actuar como servidor DNS mediante la combinación de Pi-hole y Unbound. Esta arquitectura permitía resolver consultas DNS de manera recursiva directamente contra los servidores raíz de Internet, eliminando intermediarios y proporcionando un mayor control sobre la privacidad del tráfico, además de incorporar filtrado de dominios a nivel de red.
 La dirección que toma este servidor a partir de ahora es adoptar la filosofía “Zero Trust”, principio arquitectónico que parte de una premisa fundamental: ninguna red, ni siquiera la local, debe considerarse intrínsecamente segura. Este cambio conceptual implica abandonar los modelos tradicionales basados en exposición de servicios mediante apertura de puertos y sustituirlos por mecanismos de autenticación fuerte, cifrado extremo a extremo y control de acceso basado en identidad.
 Bajo este marco, el objetivo del proyecto es diseñar e implementar una nube privada plenamente controlada por el usuario, capaz de ofrecer servicios accesibles tanto desde la red local como desde fuera de ella, sin necesidad de exponer puertos ni comprometer la superficie de ataque.
 
-## Fundamento teórico
-### 1.	Tailscale: la muerte del modelo Hub-and-Spoke y el Ascenso de la comunicación peer-to-peer con WireGuard
+## Fundamento teorico
+### 1. Tailscale - la muerte del modelo Hub-and-Spoke y el ascenso de la comunicacion peer-to-peer con WireGuard
 Históricamente las VPN adoptaban topologías hub-and-spoke: todos los clientes remotos se conectaban a un servidor central, y éste reenviaba el tráfico entre ellos. Esto causaba cuellos de botella y latencias innecesarias, ya que los datos viajaban de extremo a extremo pasando por el hub. 
 <img width="639" height="406" alt="image" src="https://github.com/user-attachments/assets/c4ee7eb1-f39a-4975-a33e-07f7a60a67ae" />
 En contraste, Tailscale introduce una arquitectura radicalmente distinta basada en redes mesh o de malla, donde cada nodo es capaz de comunicarse directamente con cualquier otro nodo autorizado. Este modelo elimina la necesidad de encaminamiento indirecto, permitiendo que los datos fluyan por la ruta más corta posible entre origen y destino. El resultado es una reducción significativa de la latencia, una mejora en el rendimiento global y una distribución más eficiente de la carga a medida que crece el número de dispositivos.
@@ -13,7 +27,8 @@ En contraste, Tailscale introduce una arquitectura radicalmente distinta basada 
 Desde el punto de vista arquitectónico, Tailscale separa claramente dos planos funcionales. Por un lado, el plano de control, gestionado por un servidor de coordinación (conocido como coordination server), cuya función es facilitar el descubrimiento entre nodos mediante el intercambio de claves públicas y metadatos de conectividad. Este servidor no participa en el flujo de datos ni tiene acceso al contenido de las comunicaciones.
 Por otro lado, el plano de datos se construye sobre WireGuard, un protocolo de VPN moderno caracterizado por su simplicidad, eficiencia y seguridad criptográfica. WireGuard utiliza criptografía de última generación (Curve25519, ChaCha20, Poly1305) para establecer túneles cifrados punto a punto, minimizando la sobrecarga y maximizando el rendimiento. A diferencia de soluciones tradicionales, su diseño minimalista reduce la superficie de ataque y facilita auditorías de seguridad.
 En este contexto, cada nodo mantiene su propia clave privada, que nunca abandona el dispositivo, mientras que las claves públicas se distribuyen a través del plano de control. La autenticación de los dispositivos se realiza mediante mecanismos modernos como OAuth, lo que permite integrar identidades externas sin necesidad de gestionar credenciales manualmente. El resultado es una red privada distribuida donde la confidencialidad y la integridad de los datos están garantizadas extremo a extremo.
-### 2.	Tailscale y su “magia” para realizar conexiones a través de NATs y firewalls hogareños
+
+### 2. Tailscale y su magia para realizar conexiones a traves de NATs y firewalls hogarenos
 Uno de los desafíos fundamentales en la construcción de redes privadas distribuidas es la conectividad entre nodos situados detrás de dispositivos de traducción de direcciones de red (NAT) y firewalls con estado (stateful firewalls). En escenarios domésticos y móviles, es habitual que los dispositivos carezcan de direcciones IP públicas accesibles, especialmente cuando operan bajo esquemas de CGNAT (Carrier-Grade NAT).
 En estos entornos, los firewalls aplican una regla básica: únicamente se permite la entrada de paquetes que correspondan a una conexión previamente iniciada desde el interior de la red. Esto impide, en principio, que dos dispositivos situados tras NAT independientes puedan establecer comunicación directa.
 <img width="886" height="346" alt="image" src="https://github.com/user-attachments/assets/d6c7b189-11ce-4d0c-9827-dd9d6e89be16" />
@@ -26,8 +41,8 @@ Para más información sobre el funcionamiento de Tailscale, que en este documen
 -	https://tailscale.com/blog/how-tailscale-works 
 -	https://tailscale.com/blog/how-nat-traversal-works 
 
-## Fase de implementación
-### 1.	Blindaje del DNS (Pi-hole + Unbound DoT)
+## Fase de implementacion
+### 1. Blindaje del DNS (Pi-hole y Unbound DoT)
 El primer paso fue reforzar la privacidad desde la raíz: el DNS. Sin cifrado, el operador o cualquier observador en la ruta conocería cada dominio que resolvemos. Por eso instalamos Pi-hole como servidor DNS local de la LAN, junto con Unbound configurado como recursivo que realiza consultas DNS-over-TLS (DoT) a Quad9. Quad9 es un servicio DNS público gratuito centrado en seguridad y privacidad.
 En la configuración de Unbound se añade una forward-zone al dominio raíz con forward-tls-upstream: yes hacia 9.9.9.9@853#dns.quad9.net (y secundario 149.112.112.112@853#dns.quad9.net). Con esto todo DNS saliente desde la Pi va cifrado por TLS al resolver de Quad9, impidiendo que el ISP vea nuestras consultas:</br>
 **/etc/unbound/unbound.conf.d/pi-hole.conf**
@@ -45,7 +60,7 @@ Por último, aislamos al nodo principal de las DNS globales de Tailscale. Tailsc
 
 El flag --accept-dns=false ordena al nodo ignorar cualquier DNS del tailnet, usando exclusivamente su resolver local. Y --advertise-routes=192.168.1.0/24 anuncia la ruta de la LAN al tailnet. Así, los dispositivos remotos sí ven la Pi-hole como DNS (gracias al anuncio de ruta), pero la Raspberry mantiene su cordura resolviendo internamente con Quad9 encripta directamente. En síntesis, el DNS quedó “blindado”: cifrado en el tránsito (DoT+DNSSEC) y deslindado del MagicDNS de Tailscale, garantizando privacidad total.
 
-### 2.	Implementación de Nextcloud AIO: conflicto de puertos y externalización del perímetro mediante proxy inverso
+### 2. Implementacion de Nextcloud AIO - conflicto de puertos y externalizacion del perimetro mediante proxy inverso
 En esta fase se introdujo uno de los componentes más relevantes de la infraestructura: Nextcloud en su variante Nextcloud All-in-One (AIO). Esta solución, diseñada para simplificar despliegues complejos, incorpora un contenedor maestro que orquesta múltiples servicios internos (base de datos, almacenamiento, servidor web, etc.). Sin embargo, su diseño presenta una limitación crítica desde el punto de vista arquitectónico: asume el control absoluto de los puertos 80 y 443 del host.
 Para materializar el desacoplamiento de ambos puertos, se identificó que el contenedor maestro encapsula un servidor Apache HTTP Server que, por diseño, escucha en el puerto 11000 dentro del entorno de los contenedores. Entonces se modificó la configuración del contenedor mediante variables de entorno para forzar el uso de ese puerto interno y de esta forma hacer que Nextcloud pase a ser accesible únicamente desde el backend en lugar de estar “de cara al usuario”, lo que además introduce una capa de seguridad intermedia.</br>
 ```
@@ -71,7 +86,7 @@ En este contexto, NPM actúa como un proxy interno dentro de la red Tailscale.
 -	NPM gestiona el enrutamiento y la terminación TLS
 -	Nextcloud actúa exclusivamente como servicio de aplicación
 
-### 3.	Implementación de Immich: acceso seguro, proxy inverso, cifrado TLS y elección de proveedor DNS
+### 3. Implementacion de Immich - acceso seguro, proxy inverso, cifrado TLS y eleccion de proveedor DNS
 A pesar de que Nextcloud es una solución muy eficaz para el almacenamiento de archivos, se decidió implementar también Immich como repositorio principal de fotos y vídeos.
 A diferencia de Nextcloud, Immich no impone restricciones estrictas sobre el uso de HTTPS ni exige certificados válidos para su funcionamiento. Desde un punto de vista puramente funcional, podría operar perfectamente sobre HTTP dentro de una red local. Sin embargo, esta aproximación resulta insuficiente en el contexto de este proyecto ya que, el acceso a Immich no se limitará al entorno local, sino que se realizará de forma habitual desde redes externas (datos móviles, redes Wi-Fi públicas, etc.) a través de Tailscale. Aunque Tailscale ya proporciona cifrado extremo a extremo a nivel de red mediante WireGuard, confiar exclusivamente en esta capa implicaría depender de un único mecanismo de seguridad.
 
@@ -111,8 +126,8 @@ Una vez emitido, el certificado queda almacenado en NPM, que lo utilizará para 
 -	Nginx Proxy Manager actúa como punto único de entrada, gestionando el enrutamiento hacia el servicio correspondiente y la terminación TLS mediante certificados emitidos por Let's Encrypt y validados a través del desafío DNS-01 con DuckDNS.
 -	Immich opera como servicio de aplicación backend, accesible únicamente dentro de la red Docker a través de su puerto interno, sin exposición directa ni a la red local ni a Internet.
 
-## 4.	Gestión del hardware: Raspberry Pi al límite
-### 4.1.	La ingesta de datos: cómo importar cientos de gigas a Immich
+## 4. Gestion del hardware - Raspberry Pi al limite
+### 4.1. La ingesta de datos - como importar cientos de gigas a Immich
 De cara a la importación de las imágenes y vídeos presentes en un disco duro externo que se dejará como respaldo, se utilizará la CLI oficial de Immich en Docker, ya que es la herramienta mejor optimizada para realizar este proceso.
 Tras montar el disco externo, se ejecuta el comando:
 ```
@@ -130,7 +145,7 @@ Se empleó tmux para ejecutar este comando para que la transferencia siguiera en
 3.	/ejecutar el comando anterior de Docker/
 4.	Para salir de tmux: CTRL+B, seguido de D
 
-### 4.2.	Limitar los contenedores para no colapsar el hardware
+### 4.2. Limitar los contenedores para no colapsar el hardware
 Durante la realización no se tuvieron en cuenta los límites del hardware de la Rapberry Pi y, cuando a penas había terminado el 7% de la subida, el sistema colapsó. Al realizar una inspección de los procesos con htop se observaba una carga del procesador del 350%.
 Los procesos culpables son los contenedores de immich-server y el de Machine Learning, que escanea las fotos mientras se suben al servidor. Por este motivo, es importante desplegar los contenedores con límites de hardware establecidos en el docker-compose.yml:</br>
 -	En el contenedor principal:
