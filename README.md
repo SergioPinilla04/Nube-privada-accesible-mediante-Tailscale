@@ -56,7 +56,7 @@ forward-zone:
 Habilitar DoT junto con DNSSEC introdujo un reto: las respuestas DNS validadas por DNSSEC son mucho más grandes de 512 bytes, lo que puede fragmentarlas y provocar timeouts. La solución técnica fue aumentar el buffer DNS: siguiendo la documentación oficial de Unbound, fijamos edns-buffer-size: 1232 para evitar fragmentación. Además, en Pi-hole activamos EDNS0=true en su configuración (/etc/pihole/pihole.toml), lo que permite manejar estas consultas ampliadas sin caídas.
 Por último, aislamos al nodo principal de las DNS globales de Tailscale. Tailscale MagicDNS asigna nombres internos y puede aprovisionar DNS (por ejemplo mi-node.tailnet), lo que se usará más adelante para Nextcloud, pero no queremos que nuestra Pi consulte a sí misma a través del túnel VPN y entre en bucles. Entonces ejecutamos:</br>
 
-**sudo tailscale up --accept-dns=false --advertise-routes=192.168.1.0/24'**</br>
+**sudo tailscale up --accept-dns=false --advertise-routes=IP_LOCAL.0/24'**</br>
 
 El flag --accept-dns=false ordena al nodo ignorar cualquier DNS del tailnet, usando exclusivamente su resolver local. Y --advertise-routes=192.168.1.0/24 anuncia la ruta de la LAN al tailnet. Así, los dispositivos remotos sí ven la Pi-hole como DNS (gracias al anuncio de ruta), pero la Raspberry mantiene su cordura resolviendo internamente con Quad9 encripta directamente. En síntesis, el DNS quedó “blindado”: cifrado en el tránsito (DoT+DNSSEC) y deslindado del MagicDNS de Tailscale, garantizando privacidad total.
 
@@ -80,7 +80,7 @@ En primer lugar, permite centralizar el enrutamiento de tráfico HTTP/HTTPS en u
 En este contexto, NPM actúa como un proxy interno dentro de la red Tailscale.
 
 **Flujo completo de acceso tras la reconfiguración**
-<img width="1771" height="797" alt="nextcloud1" src="https://github.com/user-attachments/assets/20ff5fd7-19d8-4038-8216-bd101076f3bb" />
+<img width="1782" height="808" alt="nextcloud (1)" src="https://github.com/user-attachments/assets/3238f601-d689-4f3e-9e41-2cde25645807" />
 
 -	Tailscale gestiona la identidad, autenticación y cifrado de red
 -	NPM gestiona el enrutamiento y la terminación TLS
@@ -119,7 +119,7 @@ Let's Encrypt valida estos registros y emite el certificado correspondiente, sin
 Una vez emitido, el certificado queda almacenado en NPM, que lo utilizará para todas las conexiones entrantes hacia los servicios configurados.
 
 **Flujo completo de conexión a Immich**
-<img width="1921" height="820" alt="immich" src="https://github.com/user-attachments/assets/0b683a33-bf3f-4c04-9fdd-4cb0e90b9f2d" />
+<img width="1932" height="831" alt="immich (1)" src="https://github.com/user-attachments/assets/32da1db8-ebe6-4be2-8e54-8831be1708cc" />
 
 -	Tailscale gestiona la identidad de los nodos, la autenticación y el cifrado de red mediante túneles basados en WireGuard, permitiendo que el acceso a Immich se realice exclusivamente dentro de una red privada sin exposición pública.
 -	Pi-hole se encarga de la resolución DNS interna (override), asociando el dominio configurado a la IP de Tailscale del servidor, evitando así dependencias del DNS público en tiempo de ejecución.
