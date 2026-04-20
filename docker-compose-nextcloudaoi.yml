@@ -1,0 +1,24 @@
+services:
+  nextcloud-aio-mastercontainer:
+    image: nextcloud/all-in-one:latest
+    container_name: nextcloud-aio-mastercontainer
+    restart: always
+    ports:
+      - "8080:8080"   # Only port exposed to access the configuration of the master container the first time
+    environment:
+      - NEXTCLOUD_DATADIR=/mnt/ssd/nextcloud_data
+      - APACHE_PORT=11000
+      - APACHE_IP_BINDING=0.0.0.0
+      - DOCKER_API_VERSION=1.41
+    volumes:
+      - nextcloud_aio_mastercontainer:/mnt/docker-aio-config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      resources:
+        limits:               # Hardware limits according a Pi 8 with 8 GBs of RAM 
+          cpus: '1.0'
+          memory: 1536M
+
+volumes:
+  nextcloud_aio_mastercontainer:
+    external: true
